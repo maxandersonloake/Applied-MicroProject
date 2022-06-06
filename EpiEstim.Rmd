@@ -1,0 +1,47 @@
+---
+title: "EpiEstim"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Package Introduction
+
+```{r}
+library(EpiEstim)
+library(dplyr)
+library(incidence)
+```
+
+```{r}
+dir <- "/Users/berylloake/Documents/Oxford/StatML/Applied Stats Module"
+setwd(dir)
+dat <- read.csv('WHO-COVID-19-global-data.csv')
+dat_UK <- dat %>% filter(Country_code == 'GB') %>% 
+                  mutate(Date_reported = as.Date(Date_reported))
+
+```
+
+```{r, echo=FALSE}
+incidence_UK <- as.incidence(dat_UK$New_cases, dates= dat_UK$dates)
+plot(incidence_UK)
+```
+
+```{r}
+incid <- dat_UK %>% transmute(I = New_cases, dates = Date_reported)
+
+#start estimating from when incidence is first greater than 0 
+res_parametric_si <- estimate_R(incid[30:879,], method="parametric_si",
+                                config = make_config(list(mean_si = 6.48, std_si = 3.83)))
+
+plot(res_parametric_si)
+```
+
+
+
+
+
+
+
