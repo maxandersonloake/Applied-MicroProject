@@ -10,6 +10,7 @@ knitr::opts_chunk$set(echo = TRUE)
 ## Package Introduction
 
 ```{r}
+rm(list=ls())
 library(EpiEstim)
 library(dplyr)
 library(incidence)
@@ -115,10 +116,13 @@ Run stan reproduce Nouvellet et al.
 ```{r, results='hide', message=FALSE}
 data_Nouvellet <- data[date >= start_date & date <= end_date_Nouvellet]
 
+first_death = min(which(data_Nouvellet$New_deaths > 0))
+data_Nouvellet <- tail(data_Nouvellet, -first_death)
+
 data.in <- list(N = nrow(data_Nouvellet),
-                T = data_Nouvellet[, which(date == first_cutoff)],
+                T = min(which(data_Nouvellet$date >= first_cutoff)),
                 deaths = data_Nouvellet[, New_deaths],
-                mob = data_Nouvellet[, mobility_ma])
+                mob = as.numeric(data_Nouvellet[, mobility_ma])/100)
 
 mobilityModel <- stan_model('mobility.stan')
 
@@ -127,7 +131,13 @@ fit1 <- sampling(mobilityModel, data=data.in, iter = 1000)
 ```
 
 ```{r}
-mcmc_trace(fit1, pars='beta1')
+mcmc_trace(fit1, pars=c('beta1', 'beta2'))
+
+R <- get_posterior_mean(fit1, pars='R')
+RD <- get_posterior_mean(fit1, pars='RD')
+plot(R[1:235,4], type='l', col='red')
+lines(RD[1:235,4], col='blue')
+
 ```
 
 

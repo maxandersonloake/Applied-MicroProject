@@ -8,6 +8,7 @@ data{
 
 transformed data{
   //pre-calculate values of the gamma pdf
+  int deaths0 = 0; // assume 0 deaths on day 0
   real omega[N];
   real h[N];
   real omega0; 
@@ -53,20 +54,21 @@ transformed parameters{
 model{
   real sumD_omega;
   
-  //Priors: 
+  // Priors: 
   R01 ~ uniform(0,5);
   R02 ~ uniform(0,5);
   beta1 ~ uniform(-100,100);
   beta2 ~ uniform(-100,100);
   delta ~ exponential(1);
   
-  //Model:
-  //need to include deaths[1]!
+  // Model:
+  deaths[1] ~ neg_binomial_2(RD[1] * (deaths0 * omega[1] + deaths[1] * omega0), delta);
   for (n in 2:N){
-    sumD_omega = deaths[n] * omega0;
-    for (s in 1:(n-1)){
+    sumD_omega = deaths0 * omega[n]; // s = 0
+    for (s in 1:(n-1)){ // s = 1, ..., n-1
       sumD_omega += deaths[s] * omega[n-s];
     }
+    sumD_omega += deaths[n] * omega0; // s = n
     deaths[n] ~ neg_binomial_2(RD[n] * sumD_omega, delta);
   }
 }
