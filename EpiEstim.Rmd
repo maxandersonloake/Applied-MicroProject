@@ -17,6 +17,7 @@ library(rstan)
 library(bayesplot)
 library(data.table)
 library(ggplot2)
+library(zoo)
 
 options(mc.cores = parallel::detectCores())
 rstan_options(auto_write = TRUE)
@@ -57,9 +58,13 @@ mobility_UK_dataset <- melt.data.table(mobility_UK_dataset, id.vars = c('region'
 mobility_UK_dataset[, date := as.Date(gsub('X(.+)', "\\1", variable), format = '%Y.%m.%d')]
 mobility_UK_dataset <- mobility_UK_dataset[, .(date, transportation_type, value)]   
 
+# forward filling NA
+mobility_UK_dataset <- mobility_UK_dataset[order(date)]
+mobility_UK_dataset[, value := na.locf(value, fromLast = TRUE), by = 'transportation_type']
+
 # take moving average 
 ma <- function(x, n = 5){stats::filter(x, rep(1 / n, n), sides = 2)}
-mobility_UK_dataset[, value_ma := ma((value), n = 7)]
+mobility_UK_dataset[, value_ma := ma((value), n = 7), by = 'transportation_type']
 
 # take average over transportation type
 mobility_UK_dataset <- mobility_UK_dataset[, list(mobility = mean(value), 
