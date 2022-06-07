@@ -3,18 +3,22 @@ data{
   int<lower=0> N;
   int<lower=0> deaths[N];
   real mob[N];
+  int T;
 }
 
 transformed data{
   //pre-calculate values of the gamma pdf
   real omega[N];
   real h[N];
-  real omega0;
+  real omega0; 
+  real h0;
   for (n in 1:N){
-    h[n] = exp(gamma_lpdf(n | 18.8, 8.46)); //this parameterisation is wrong!
-    omega[n] = exp(gamma_lpdf(n | 6.48, 3.83)); //this parameterisation is wrong!
+    // convert mean and sd to alpha and beta
+    h[n] = exp(gamma_lpdf(n | (18.8)^2 / (8.46)^2, 18.8 / (8.46)^2)); 
+    omega[n] = exp(gamma_lpdf(n | (6.48)^2 / (3.83)^2, 6.48 / (3.83)^2)); 
   }
-  omega0 = exp(gamma_lpdf(0 | 6.48, 3.83));
+  h0 = exp(gamma_lpdf(0 | (18.8)^2 / (8.46)^2, 18.8 / (8.46)^2)); 
+  omega0 = exp(gamma_lpdf(0 | (6.48)^2 / (3.83)^2, 6.48 / (3.83)^2));
 }
 
 parameters{
@@ -23,7 +27,6 @@ parameters{
   real beta1;
   real beta2;
   real<lower=0> delta;
-  real<lower=2, upper=N-1> T;
 }
 
 transformed parameters{
@@ -31,7 +34,7 @@ transformed parameters{
   real RD[N];
 
   for (n in 1:N){
-    if (n < T){
+    if (n <= T){
       R[n] = exp(log(R01) - beta1 * (1-mob[n]));
     }
     else {
@@ -39,10 +42,11 @@ transformed parameters{
     }
   }
   for (n in 1:N){
-    RD[n] = R01 * h[n];
-    for (s in 1:(n-1)){
-      RD[n] = RD[n] + R[s] * h[n-s];
+    RD[n] = R01 * h[n]; // s = 0
+    for (s in 1:(n-1)){ // s = 1, ..., n-1
+      RD[n] += R[s] * h[n-s];
     }
+    RD[n] += R[n] * h0; // s = n
   }
 }
 
@@ -59,7 +63,6 @@ model{
   //Model:
   //need to include deaths[1]!
   for (n in 2:N){
-    //assume D[0] = 0
     sumD_omega = deaths[n] * omega0;
     for (s in 1:(n-1)){
       sumD_omega += deaths[s] * omega[n-s];

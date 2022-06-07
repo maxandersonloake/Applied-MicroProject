@@ -14,6 +14,7 @@ library(EpiEstim)
 library(dplyr)
 library(incidence)
 library(rstan)
+library(bayesplot)
 options(mc.cores = parallel::detectCores())
 rstan_options(auto_write = TRUE)
 ```
@@ -24,14 +25,17 @@ setwd(dir)
 dat <- read.csv('WHO-COVID-19-global-data.csv')
 dat_UK <- dat %>% filter(Country_code == 'GB') %>% 
                   mutate(Date_reported = as.Date(Date_reported))
-dat_UK <- dat_UK[11:879,] #get dates to line up with mobility
+dat_UK <- dat_UK[11:879,] #get first date to line up with the mobility data
 ```
 
 Need to tidy this up! 
+- which type of transportation?
 ```{r}
 mobility <- read.csv('applemobilitytrends-2022-04-03.csv')
 mobility_UK <- as.numeric(t(mobility %>% filter(region=='United Kingdom' & transportation_type=='driving'))[7:790])
 
+#replace NA values with the most recent observed value
+#how does the paper handle missing data?
 NA_index <- which(is.na(mobility_UK))
 while(length(NA_index)>0){
   mobility_UK[NA_index] <- mobility_UK[NA_index-1]
@@ -42,15 +46,22 @@ while(length(NA_index)>0){
 Stan: 
 
 ```{r, results='hide', message=FALSE}
+#at the moment am just using a random 100 consecutive data points, with T in the middle. Need to align dates with those in the paper
 data.in <- list(N = 100,
+                T = 50,
                 deaths = dat_UK$New_deaths[52:151],
                 mob = mobility_UK[52:151])
 
 mobilityModel <- stan_model('mobility.stan')
-fit1 <- sampling(mobilityModel, data=data.in, iter = 200)
+fit1 <- sampling(mobilityModel, data=data.in, iter = 1000)
 
 
 ```
+
+```{r}
+mcmc_trace(fit1, pars='beta1')
+```
+
 
 
 
