@@ -15,6 +15,9 @@ library(dplyr)
 library(incidence)
 library(rstan)
 library(bayesplot)
+library(data.table)
+library(ggplot2)
+
 options(mc.cores = parallel::detectCores())
 rstan_options(auto_write = TRUE)
 ```
@@ -22,39 +25,99 @@ rstan_options(auto_write = TRUE)
 ```{r}
 dir <- "/Users/berylloake/Documents/Github/Applied-Microproject"
 setwd(dir)
-dat <- read.csv('WHO-COVID-19-global-data.csv')
-dat_UK <- dat %>% filter(Country_code == 'GB') %>% 
-                  mutate(Date_reported = as.Date(Date_reported))
-dat_UK <- dat_UK[11:879,] #get first date to line up with the mobility data
 ```
 
-Need to tidy this up! 
-- which type of transportation?
+Set tuning parameter:
 ```{r}
-mobility <- read.csv('applemobilitytrends-2022-04-03.csv')
-mobility_UK <- as.numeric(t(mobility %>% filter(region=='United Kingdom' & transportation_type=='driving'))[7:790])
+start_date <- as.Date('2020-02-15')
+end_date_Nouvellet <- as.Date('2020-10-25')
+end_date <- as.Date('2021-04-01')
 
-#replace NA values with the most recent observed value
-#how does the paper handle missing data?
-NA_index <- which(is.na(mobility_UK))
-while(length(NA_index)>0){
-  mobility_UK[NA_index] <- mobility_UK[NA_index-1]
-  NA_index <- which(is.na(mobility_UK))
-}
+first_cutoff = as.Date('2020-05-10')
+second_cutoff = as.Date('2020-11-05')
 ```
 
-Stan: 
+Prepare deaths data:
+```{r}
+dat <- as.data.table(read.csv('WHO-COVID-19-global-data.csv'))
+dat_UK <- dat[Country_code == 'GB']
+dat_UK[, date := as.Date(Date_reported)]
+dat_UK <- dat_UK[, .(date, New_deaths)]
+```
+
+Prepare mobility data:
+```{r}
+# load
+mobility <- read.csv('applemobilitytrends-2022-04-03.csv')
+mobility_UK_dataset<- as.data.table(mobility)
+
+# select only UK and format
+mobility_UK_dataset <- mobility_UK_dataset[region=='United Kingdom']
+mobility_UK_dataset <- melt.data.table(mobility_UK_dataset, id.vars = c('region', 'geo_type', 'transportation_type', 'alternative_name', "sub.region", "country"))
+mobility_UK_dataset[, date := as.Date(gsub('X(.+)', "\\1", variable), format = '%Y.%m.%d')]
+mobility_UK_dataset <- mobility_UK_dataset[, .(date, transportation_type, value)]   
+
+# take moving average 
+ma <- function(x, n = 5){stats::filter(x, rep(1 / n, n), sides = 2)}
+mobility_UK_dataset[, value_ma := ma((value), n = 7)]
+
+# take average over transportation type
+mobility_UK_dataset <- mobility_UK_dataset[, list(mobility = mean(value), 
+                                                  mobility_ma = mean(value_ma)), by = c('date')]
+
+```
+
+Merge and clean deaths and mobility data
 
 ```{r, results='hide', message=FALSE}
-#at the moment am just using a random 100 consecutive data points, with T in the middle. Need to align dates with those in the paper
-data.in <- list(N = 100,
-                T = 50,
-                deaths = dat_UK$New_deaths[52:151],
-                mob = mobility_UK[52:151])
+
+# merge deaths and mobility
+data <- merge(dat_UK, mobility_UK_dataset, by = 'date')
+data <- data[order(date)]
+
+# mobility must not be NA
+data <- data[!is.na(mobility_ma)]
+
+# start from the cumulative deaths are >= 30
+data[, cumulative_deaths := cumsum(New_deaths)]
+# data <- data[cumulative_deaths >= 30]
+
+```
+
+Plot:
+```{r, results='hide', message=FALSE}
+ggplot(data, aes(x = date)) + 
+  geom_point(aes( y = New_deaths))+ 
+  geom_line(aes(y = New_deaths)) + 
+  theme_bw() +
+  geom_vline(xintercept = first_cutoff, linetype = 'dotted')+
+  geom_vline(xintercept = second_cutoff, linetype = 'dotted')+
+  labs(y = 'New deaths')
+```
+
+```{r, results='hide', message=FALSE}
+ggplot(data, aes(x = date)) + 
+  geom_point(aes( y = mobility))+ 
+  geom_line(aes(y = mobility_ma), col= 'darkred') + 
+  theme_bw() +
+  geom_vline(xintercept = first_cutoff, linetype = 'dotted')+
+  geom_vline(xintercept = second_cutoff, linetype = 'dotted')+
+  labs(y = 'Mobility indicator')
+```
+
+
+Run stan reproduce Nouvellet et al.
+```{r, results='hide', message=FALSE}
+data_Nouvellet <- data[date >= start_date & date <= end_date_Nouvellet]
+
+data.in <- list(N = nrow(data_Nouvellet),
+                T = data_Nouvellet[, which(date == first_cutoff)],
+                deaths = data_Nouvellet[, New_deaths],
+                mob = data_Nouvellet[, mobility_ma])
 
 mobilityModel <- stan_model('mobility.stan')
-fit1 <- sampling(mobilityModel, data=data.in, iter = 1000)
 
+fit1 <- sampling(mobilityModel, data=data.in, iter = 1000)
 
 ```
 
