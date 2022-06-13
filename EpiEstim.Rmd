@@ -20,12 +20,18 @@ library(data.table)
 library(ggplot2)
 library(zoo)
 
+ps <- c(0.5, 0.025, 0.975)
+p_labs <- c('M','CL','CU')
+  
 options(mc.cores = parallel::detectCores())
 rstan_options(auto_write = TRUE)
 ```
 
 ```{r}
 dir <- "/Users/berylloake/Documents/Github/Applied-Microproject"
+if(0){
+  dir <- "~/Box\ Sync/2022/Applied-stats"
+}
 setwd(dir)
 ```
 
@@ -36,7 +42,7 @@ end_date_Nouvellet <- as.Date('2020-10-25')
 end_date <- as.Date('2021-04-01')
 
 first_cutoff = as.Date('2020-05-10')
-second_cutoff = as.Date('2020-11-05')
+second_cutoff = end_date_Nouvellet
 ```
 
 Prepare deaths data:
@@ -84,52 +90,143 @@ data <- data[order(date)]
 # mobility must not be NA
 data <- data[!is.na(mobility_ma)]
 
-# start from the cumulative deaths are >= 30
-data[, cumulative_deaths := cumsum(New_deaths)]
-# data <- data[cumulative_deaths >= 30]
+# restrict to end date
+data <- data[date <= end_date]
+
+# keep from first death
+first_death = min(which(data$New_deaths > 0))
+data <- tail(data, -first_death)
+start_date <- data[, min(date)]
+
+# deflate mobility
+data[, mobility100 := as.numeric(mobility_ma)/100]
 
 ```
 
 Plot:
 ```{r, results='hide', message=FALSE}
+
+dt <- data.table(threshold = c('Start date', 'End date Nouvellet et al.', 'end date (extension)',
+                                   '1st breakpoint Nouvellet et al.'#, '2nd breakpoint (extension)'
+                               ), 
+                     date = c(start_date, end_date_Nouvellet, end_date, 
+                              first_cutoff#, second_cutoff
+                              ))
+dt[, threshold := factor(threshold, levels = threshold[order(date)])]
+
+tmp <- data[date <= end_date_Nouvellet]
+ggplot(tmp, aes(x = date)) + 
+  geom_point(aes( y = New_deaths))+ 
+  geom_step(aes(y = New_deaths)) + 
+  theme_bw() +
+  labs(y = 'Daily deaths in the UK', x = '', shape = '', col = '') + 
+  scale_x_date(date_labels = '%B %Y') + 
+  geom_segment(data = dt[grepl('Nouvellet|Start', threshold)], aes(x = date, xend = date), y= 0, yend = max(tmp$New_deaths), linetype = 'dashed', col = 'grey50')+ 
+  geom_point(data = dt[grepl('Nouvellet|Start', threshold)], aes(x = date, shape = threshold, col = threshold), y = max(tmp$New_deaths)) 
+ggsave(file.path(dir, 'daily_death_Nouvellet.png'), w = 8, h = 5)
+
 ggplot(data, aes(x = date)) + 
   geom_point(aes( y = New_deaths))+ 
-  geom_line(aes(y = New_deaths)) + 
+  geom_step(aes(y = New_deaths)) + 
   theme_bw() +
-  geom_vline(xintercept = first_cutoff, linetype = 'dotted')+
-  geom_vline(xintercept = second_cutoff, linetype = 'dotted')+
-  labs(y = 'New deaths')
+  labs(y = 'Daily deaths in the UK', x = '', shape = '', col = '') + 
+  scale_x_date(date_labels = '%B %Y') + 
+  geom_segment(data = dt, aes(x = date, xend = date), y= 0, yend = max(data$New_deaths), linetype = 'dashed', col = 'grey50')+ 
+  geom_point(data = dt, aes(x = date, shape = threshold, col = threshold), y = max(data$New_deaths)) 
+ggsave(file.path(dir, 'daily_death_extension.png'), w = 8, h = 5)
 ```
 
 ```{r, results='hide', message=FALSE}
-ggplot(data, aes(x = date)) + 
-  geom_point(aes( y = mobility))+ 
-  geom_line(aes(y = mobility_ma), col= 'darkred') + 
+
+tmp <- data[date <= end_date_Nouvellet]
+ggplot(tmp, aes(x = date)) + 
+  geom_hline(yintercept = 1, linetype = 'dotted') +
+  # geom_point(aes( y = mobility))+ 
+  geom_line(aes(y = mobility100)) + 
   theme_bw() +
-  geom_vline(xintercept = first_cutoff, linetype = 'dotted')+
-  geom_vline(xintercept = second_cutoff, linetype = 'dotted')+
-  labs(y = 'Mobility indicator')
+  labs(y = 'Mobility indicator', x = '', shape = '', col = '') + 
+   geom_segment(data = dt[grepl('Nouvellet|Start', threshold)], aes(x = date, xend = date), y= 0, yend = max(tmp$mobility100), linetype = 'dashed', col = 'grey50')+ 
+  geom_point(data = dt[grepl('Nouvellet|Start', threshold)], aes(x = date, shape = threshold, col = threshold), y = max(tmp$mobility100))+ 
+  scale_x_date(date_labels = '%B %Y') +
+  scale_y_continuous(labels = scales::percent) + 
+  theme(legend.position = 'bottom') + 
+  guides(col = guide_legend(nrow=2,byrow=TRUE), shape = guide_legend(nrow=2,byrow=TRUE))
+ggsave(file.path(dir, 'mobility_Nouvellet.png'), w = 5, h = 5)
+
+
+ggplot(data, aes(x = date)) + 
+  geom_hline(yintercept = 1, linetype = 'dotted') +
+  # geom_point(aes( y = mobility))+ 
+  geom_line(aes(y = mobility100)) + 
+  theme_bw() +
+  labs(y = 'Mobility indicator', x = '', shape = '', col = '') + 
+   geom_segment(data = dt, aes(x = date, xend = date), y= 0, yend = max(data$mobility100), linetype = 'dashed', col = 'grey50')+ 
+  geom_point(data = dt, aes(x = date, shape = threshold, col = threshold), y = max(data$mobility100))+ 
+  scale_x_date(date_labels = '%B %Y') +
+  scale_y_continuous(labels = scales::percent)
+ggsave(file.path(dir, 'mobility_extension.png'), w = 8, h = 5)
+
 ```
 
+Prepare common objects for reproduction and extension
+```{r, results='hide', message=FALSE}
+
+# time cutoff
+T_1 = min(which(data$date >= first_cutoff))
+T_2 = min(which(data$date >= second_cutoff))
+
+df_time <- data.table(idx_time = 1:nrow(data))
+df_time[, period := '3rd period']
+df_time[idx_time < T_2, period := '2nd period']
+df_time[idx_time < T_1, period := '1st period']
+df_time[period == '1st period', label := paste0(format(start_date, '%B %Y'), '-', format(first_cutoff, '%B %Y'))]
+df_time[period == '2nd period', label := paste0(format(first_cutoff, '%B %Y'), '-', format(second_cutoff, '%B %Y'))]
+df_time[period == '3rd period', label := paste0(format(second_cutoff, '%B %Y'), '-', format(end_date, '%B %Y'))]
+
+# figure 2c
+mobility_counterfactual <- seq(0, 1, 0.1)
+M <- length(mobility_counterfactual)
+df_mobility <- data.table(mobility = mobility_counterfactual, idx_mobility = 1:M)
+df_mobility[, prop_reduction := abs((mobility - 1)/ 1)]
+
+```
 
 Run stan reproduce Nouvellet et al.
 ```{r, results='hide', message=FALSE}
 data_Nouvellet <- data[date >= start_date & date <= end_date_Nouvellet]
 
-first_death = min(which(data_Nouvellet$New_deaths > 0))
-data_Nouvellet <- tail(data_Nouvellet, -first_death)
+df_time_Nouvellet <- data.table(idx_time = 1:nrow(data))
+df_time_Nouvellet[, period := '2nd period']
+df_time_Nouvellet[idx_time < T_1, period := '1st period']
+df_time_Nouvellet[period == '1st period', label := paste0(format(start_date, '%B'), '-', format(first_cutoff, '%B %Y'))]
+df_time_Nouvellet[period == '2nd period', label := paste0(format(first_cutoff, '%B'), '-', format(end_date_Nouvellet, '%B %Y'))]
 
 data.in <- list(N = nrow(data_Nouvellet),
-                T = min(which(data_Nouvellet$date >= first_cutoff)),
+                T = T_1,
                 deaths = data_Nouvellet[, New_deaths],
-                mob = as.numeric(data_Nouvellet[, mobility_ma])/100)
+                mob = as.numeric(data_Nouvellet[, mobility_ma])/100, 
+                M = M,
+                mobility_counterfactual = mobility_counterfactual)
 
 mobilityModel <- stan_model('mobility.stan')
 
 fit1 <- sampling(mobilityModel, data=data.in, iter = 1000)
-
+samples <- extract(fit1) 
+# saveRDS(fit1, file = file.path(dir, 'fit1.rds'))
 ```
 
+CI 
+```{r}
+bayesplot::mcmc_intervals(fit1, pars=c('beta1', 'beta2'), prob_outer = 0.95, prob = 0.95) + 
+  scale_x_continuous(limits = c(0, NA)) + 
+  geom_vline(xintercept = 0, linetype = 'dashed', col = 'grey50')
+ggsave(file.path(dir, 'beta_CI.png'), w = 5, h =1.5)
+bayesplot::mcmc_intervals(fit1, pars=c('R01', 'R02'), prob_outer = 0.95, prob = 0.95) + 
+  geom_vline(xintercept = 1, linetype = 'dashed', col = 'grey50')
+ggsave(file.path(dir, 'R0_CI.png'), w = 5, h = 1.5)
+```
+
+Figure 2a: Max
 ```{r}
 mcmc_trace(fit1, pars=c('beta1', 'beta2'))
 
@@ -140,8 +237,155 @@ lines(RD[1:235,4], col='blue')
 
 ```
 
+Figure 2c
+```{r}
+cols <- c('green4', 'darkorange2')
+
+tmp <- as.data.table(reshape2::melt(samples[['R1_counterfactual']]))
+tmp[, period := '1st period']
+tmp1 <- as.data.table(reshape2::melt(samples[['R2_counterfactual']]))
+tmp1[, period := '2nd period']
+tmp <- rbind(tmp, tmp1)
+
+setnames(tmp, 2, 'idx_mobility')
+tmp = tmp[, list(q= quantile(value, prob=ps), q_label=p_labs), by = c('idx_mobility', 'period')]
+tmp = dcast.data.table(tmp, idx_mobility + period ~ q_label, value.var='q')
+
+tmp <- merge(tmp, df_mobility, by = 'idx_mobility')
+tmp <- merge(tmp, unique(df_time_Nouvellet[, .(period, label)]), by = 'period')
+
+ggplot(tmp, aes(x = prop_reduction)) + 
+  geom_hline(aes(yintercept = 1), linetype = 'dashed', col = 'grey50') + 
+  geom_line(aes(y = M, col = label)) + 
+  geom_ribbon(aes(ymin = CL, ymax = CU, fill = label), alpha = 0.5) + 
+  theme_bw() + 
+  labs(y = 'Reproduction number', x = 'Proportion reduction in mobility compared to pre-pandemic baseline, (1-m)', col = '', fill ='') + 
+  scale_color_manual(values = cols)+ 
+  scale_fill_manual(values = cols) + 
+  scale_y_continuous(limits = c(0, NA))
+ggsave(file.path(dir, 'mobility_Rt.png'), w = 7, h = 5)
+
+```
+
+Figure 4
+```{r}
+tmp <- as.data.table(reshape2::melt(samples[['R1_threshold']]))
+tmp[, period := '1st period']
+tmp1 <- as.data.table(reshape2::melt(samples[['R2_threshold']]))
+tmp1[, period := '2nd period']
+tmp <- rbind(tmp, tmp1)
+
+tmp = tmp[, list(q= quantile(value, prob=ps), q_label=p_labs), by = c('period')]
+tmp = dcast.data.table(tmp, period ~ q_label, value.var='q')
+tmp[, type := 'Us']
+
+Nouvellet_results <- data.table(period = c('2nd period', '1st period'), type= 'Nouvellet et al.',
+                                CL = c(0.14233, 0.41104), 
+                                CU = c(0.21226, 0.46257), 
+                                M = c(0.17546, 0.43312))
+tmp <- rbind(tmp, Nouvellet_results)
+
+tmp <- merge(tmp, unique(df_time_Nouvellet[, .(period, label)]), by = 'period')
+
+ggplot(tmp, aes(y = type)) + 
+  geom_point(aes(x = M, col = label)) + 
+  geom_errorbarh(aes(xmin = CL, xmax = CU, col = label), alpha = 0.5, height = 0) + 
+  theme_bw() + 
+  labs(y = '', x = 'Proportion reduction in mobility compared to pre-pandemic baseline, (1-m)\nnecessary to interrupt transmission', col = '') + 
+  scale_color_manual(values = cols)
+ggsave(file.path(dir, 'mobility_threshold.png'), w = 6, h = 3)
+```
 
 
+Run stan extension 
+```{r, results='hide', message=FALSE}
+data_extension <- data[date >= start_date & date <= end_date]
+
+data.in <- list(N = nrow(data_extension),
+                T_1 = T_1,
+                T_2 = T_2,
+                deaths = data_extension[, New_deaths],
+                mob = as.numeric(data_extension[, mobility_ma])/100, 
+                M = M,
+                mobility_counterfactual = mobility_counterfactual)
+
+mobilityextensionModel <- stan_model('mobility_extension.stan')
+
+fit2 <- sampling(mobilityextensionModel, data=data.in, iter = 1000)
+# saveRDS(fit2, file = file.path(dir, 'fit2.rds'))
+samples <- extract(fit2) 
+```
+
+CI 
+```{r}
+bayesplot::mcmc_intervals(fit2, pars=c('beta1', 'beta2', 'beta3'), prob_outer = 0.95, prob = 0.95) + 
+  scale_x_continuous(limits = c(0, NA)) + 
+  geom_vline(xintercept = 0, linetype = 'dashed', col = 'grey50')
+ggsave(file.path(dir, 'beta_CI_extension.png'), w = 5, h = 2)
+
+bayesplot::mcmc_intervals(fit2, pars=c('R01', 'R02', 'R03'), prob_outer = 0.95, prob = 0.95) + 
+  geom_vline(xintercept = 1, linetype = 'dashed', col = 'grey50')
+ggsave(file.path(dir, 'R0_CI_extension.png'), w = 5, h = 2)
+```
+
+
+<!-- Figure 2c extension -->
+<!-- ```{r} -->
+<!-- cols <- c('green4', 'darkorange2', 'darkred') -->
+
+<!-- tmp <- as.data.table(reshape2::melt(samples[['R1_counterfactual']])) -->
+<!-- tmp[, period := '1st period'] -->
+<!-- tmp1 <- as.data.table(reshape2::melt(samples[['R2_counterfactual']])) -->
+<!-- tmp1[, period := '2nd period'] -->
+<!-- tmp <- rbind(tmp, tmp1) -->
+<!-- tmp1 <- as.data.table(reshape2::melt(samples[['R3_counterfactual']])) -->
+<!-- tmp1[, period := '3rd period'] -->
+<!-- tmp <- rbind(tmp, tmp1) -->
+
+<!-- setnames(tmp, 2, 'idx_mobility') -->
+<!-- tmp = tmp[, list(q= quantile(value, prob=ps), q_label=p_labs), by = c('idx_mobility', 'period')] -->
+<!-- tmp = dcast.data.table(tmp, idx_mobility + period ~ q_label, value.var='q') -->
+
+<!-- tmp <- merge(tmp, df_mobility, by = 'idx_mobility') -->
+<!-- tmp <- merge(tmp, unique(df_time[, .(period, label)]), by = 'period') -->
+
+<!-- ggplot(tmp, aes(x = prop_reduction)) +  -->
+<!--   geom_hline(aes(yintercept = 1), linetype = 'dashed', col = 'grey50') +  -->
+<!--   geom_line(aes(y = M, col = label)) +  -->
+<!--   geom_ribbon(aes(ymin = CL, ymax = CU, fill = label), alpha = 0.5) +  -->
+<!--   theme_bw() +  -->
+<!--   labs(y = 'Reproduction number', x = 'Proportion reduction in mobility compared to pre-pandemic baseline, (1-m)', col = '', fill ='') +  -->
+<!--   scale_color_manual(values = cols)+  -->
+<!--   scale_fill_manual(values = cols) +  -->
+<!--   scale_y_continuous(limits = c(0, NA)) -->
+<!-- ggsave(file.path(dir, 'mobility_Rt_extension.png'), w = 7, h = 5) -->
+
+<!-- ``` -->
+
+Figure 4
+```{r}
+tmp <- as.data.table(reshape2::melt(samples[['R1_threshold']]))
+tmp[, period := '1st period']
+tmp1 <- as.data.table(reshape2::melt(samples[['R2_threshold']]))
+tmp1[, period := '2nd period']
+tmp <- rbind(tmp, tmp1)
+tmp1 <- as.data.table(reshape2::melt(samples[['R3_threshold']]))
+tmp1[, period := '3rd period']
+tmp <- rbind(tmp, tmp1)
+
+tmp = tmp[, list(q= quantile(value, prob=ps), q_label=p_labs), by = c('period')]
+tmp = dcast.data.table(tmp, period ~ q_label, value.var='q')
+
+tmp <- merge(tmp, unique(df_time[, .(period, label)]), by = 'period')
+
+ggplot(tmp, aes(y = label)) + 
+  geom_point(aes(x = M, col = label)) + 
+  geom_errorbarh(aes(xmin = CL, xmax = CU, col = label), alpha = 0.5, height = 0) + 
+  theme_bw() + 
+  labs(y = '', x = 'Proportion reduction in mobility compared to pre-pandemic baseline, (1-m)\nnecessary to interrupt transmission', col = '') + 
+  scale_color_manual(values = cols)
+ggsave(file.path(dir, 'mobility_threshold_extension.png'), w = 8, h = 3)
+```
 
 
 EpiEstim:

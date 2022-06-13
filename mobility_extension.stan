@@ -3,7 +3,8 @@ data{
   int<lower=0> N;
   int<lower=0> deaths[N];
   real mob[N];
-  int T;
+  int T_1;
+  int T_2;
   int M;
   vector[M] mobility_counterfactual;
 }
@@ -27,8 +28,10 @@ transformed data{
 parameters{
   real R01;
   real R02;
+  real R03;
   real beta1;
   real beta2;
+  real beta3;
   real<lower=0> delta;
 }
 
@@ -37,11 +40,14 @@ transformed parameters{
   real RD[N];
 
   for (n in 1:N){
-    if (n <= T){
+    if (n <= T_1){
       R[n] = exp(log(R01) - beta1 * (1-mob[n]));
     }
-    else {
+    else if(n <= T_2){
       R[n] = exp(log(R02) - beta2 * (1-mob[n]));
+    }
+    else {
+      R[n] = exp(log(R03) - beta3 * (1-mob[n]));
     }
   }
   for (n in 1:N){
@@ -59,8 +65,10 @@ model{
   // Priors: 
   R01 ~ uniform(0,5);
   R02 ~ uniform(0,5);
+  R03 ~ uniform(0,5);
   beta1 ~ uniform(-100,100);
   beta2 ~ uniform(-100,100);
+  beta3 ~ uniform(-100,100);
   delta ~ exponential(1);
   
   // Model:
@@ -78,12 +86,17 @@ model{
 generated quantities {
   vector[M] R1_counterfactual;
   vector[M] R2_counterfactual;
+  vector[M] R3_counterfactual;
   real R1_threshold;
   real R2_threshold;
+  real R3_threshold;
   
   R1_counterfactual = exp(log(R01) - beta1 * (1-mobility_counterfactual));
   R2_counterfactual = exp(log(R02) - beta2 * (1-mobility_counterfactual));
+  R3_counterfactual = exp(log(R03) - beta3 * (1-mobility_counterfactual));
   
   R1_threshold = log(R01) / beta1;
   R2_threshold = log(R02) / beta2;
+  R3_threshold = log(R03) / beta3;
 }
+
