@@ -227,6 +227,17 @@ ggsave(file.path(dir, 'R0_CI.png'), w = 5, h = 1.5)
 ```
 
 Figure 2b: Max
+
+EpiEstim:
+```{r}
+incid <- data_Nouvellet %>% transmute(I = New_deaths, dates = date)
+config_data = make_config(list(mean_si = 6.48, std_si = 3.83))
+config_data$t_start <- seq(2, nrow(incid)-6,6)
+config_data$t_end <- config_data$t_start + 6
+
+res <- EpiEstim:::estimate_R(incid, method='parametric_si', config=make_config(config_data))
+```
+
 ```{r}
 df_plot_2b <- data.frame(
   date = data_Nouvellet$date,
@@ -235,7 +246,10 @@ df_plot_2b <- data.frame(
   R_95_lower <- summary(fit1, pars='R')$summary[,'2.5%'],
   R_95_upper <- summary(fit1, pars='R')$summary[,'97.5%'],
   RD_95_lower <- summary(fit1, pars='RD')$summary[,'2.5%'],
-  RD_95_upper <- summary(fit1, pars='RD')$summary[,'97.5%']
+  RD_95_upper <- summary(fit1, pars='RD')$summary[,'97.5%'],
+  Repi <- c(NA, rep(res$R[,'Median(R)'], each=6), rep(NA, 6)),
+  Repi_95_lower <- c(NA, rep(res$R[,'Quantile.0.025(R)'], each=6), rep(NA, 6)),
+  Repi_95_upper <- c(NA, rep(res$R[,'Quantile.0.975(R)'], each=6), rep(NA, 6))
 )
 
 ggplot(df_plot_2b, aes(date)) +
@@ -243,6 +257,9 @@ ggplot(df_plot_2b, aes(date)) +
   geom_ribbon(aes(ymin=R_95_lower, ymax=R_95_upper), fill='red', alpha=0.2) + 
   geom_line(aes(y=RD), col='blue') + 
   geom_ribbon(aes(ymin=RD_95_lower, ymax=RD_95_upper), fill='blue', alpha=0.2) +
+  geom_line(aes(y=Repi),col='black') +
+  geom_ribbon(aes(ymin=Repi_95_lower, ymax=Repi_95_upper), fill='black', alpha=0.2) +
+  geom_line(aes(y=1),col='green',linetype='dashed') +
   xlab('Date')
 
 ggsave(file.path(dir, 'Figure_2b.png'), w = 7, h = 5)
@@ -399,22 +416,6 @@ ggsave(file.path(dir, 'mobility_threshold_extension.png'), w = 8, h = 3)
 ```
 
 
-EpiEstim:
-
-```{r, echo=FALSE}
-incidence_UK <- as.incidence(dat_UK$New_cases, dates= dat_UK$dates)
-plot(incidence_UK)
-```
-
-```{r}
-incid <- dat_UK %>% transmute(I = New_cases, dates = Date_reported)
-
-#start estimating from when incidence is first greater than 0 
-res_parametric_si <- estimate_R(incid[30:879,], method="parametric_si",
-                                config = make_config(list(mean_si = 6.48, std_si = 3.83)))
-
-plot(res_parametric_si)
-```
 
 
 
