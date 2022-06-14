@@ -226,15 +226,26 @@ bayesplot::mcmc_intervals(fit1, pars=c('R01', 'R02'), prob_outer = 0.95, prob = 
 ggsave(file.path(dir, 'R0_CI.png'), w = 5, h = 1.5)
 ```
 
-Figure 2a: Max
+Figure 2b: Max
 ```{r}
-mcmc_trace(fit1, pars=c('beta1', 'beta2'))
+df_plot_2b <- data.frame(
+  date = data_Nouvellet$date,
+  R <- summary(fit1, pars='R')$summary[,'50%'],
+  RD <- summary(fit1, pars='RD')$summary[,'50%'],
+  R_95_lower <- summary(fit1, pars='R')$summary[,'2.5%'],
+  R_95_upper <- summary(fit1, pars='R')$summary[,'97.5%'],
+  RD_95_lower <- summary(fit1, pars='RD')$summary[,'2.5%'],
+  RD_95_upper <- summary(fit1, pars='RD')$summary[,'97.5%']
+)
 
-R <- get_posterior_mean(fit1, pars='R')
-RD <- get_posterior_mean(fit1, pars='RD')
-plot(R[1:235,4], type='l', col='red')
-lines(RD[1:235,4], col='blue')
+ggplot(df_plot_2b, aes(date)) +
+  geom_line(aes(y=R), col='red') + 
+  geom_ribbon(aes(ymin=R_95_lower, ymax=R_95_upper), fill='red', alpha=0.2) + 
+  geom_line(aes(y=RD), col='blue') + 
+  geom_ribbon(aes(ymin=RD_95_lower, ymax=RD_95_upper), fill='blue', alpha=0.2) +
+  xlab('Date')
 
+ggsave(file.path(dir, 'Figure_2b.png'), w = 7, h = 5)
 ```
 
 Figure 2c

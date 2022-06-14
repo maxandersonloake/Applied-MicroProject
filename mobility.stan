@@ -18,10 +18,10 @@ transformed data{
   for (n in 1:N){
     // convert mean and sd to alpha and beta
     h[n] = exp(gamma_lpdf(n | (18.8)^2 / (8.46)^2, 18.8 / (8.46)^2)); 
-    omega[n] = exp(gamma_lpdf(n | (6.48)^2 / (3.83)^2, 6.48 / (3.83)^2)); 
+    omega[n] = gamma_cdf(n + 0.5, (6.48)^2 / (3.83)^2, 6.48 / (3.83)^2) - gamma_cdf(n - 0.5, (6.48)^2 / (3.83)^2, 6.48 / (3.83)^2); 
   }
   h0 = exp(gamma_lpdf(0 | (18.8)^2 / (8.46)^2, 18.8 / (8.46)^2)); 
-  omega0 = exp(gamma_lpdf(0 | (6.48)^2 / (3.83)^2, 6.48 / (3.83)^2));
+  omega0 = gamma_cdf(0.5, (6.48)^2 / (3.83)^2, 6.48 / (3.83)^2) - gamma_cdf(0, (6.48)^2 / (3.83)^2, 6.48 / (3.83)^2);
 }
 
 parameters{
